@@ -258,7 +258,7 @@ class FeedRepository extends ConfigRepository implements FeedInterface
     /**
      * @inheritDoc
      */
-    public function getStaticFields($storeId): array
+    public function getStaticFields(int $storeId): array
     {
         $staticFields = [
             'currency' => $this->getStore($storeId)->getCurrentCurrency()->getCode(),
