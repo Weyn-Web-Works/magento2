@@ -4,71 +4,135 @@
  * See COPYING.txt for license details.
  */
 
-namespace TradeTracker\Connect\Setup\Patch\Data;
+namespace TradeTracker\Connect\Setup;
 
+use Magento\Catalog\Model\Category;
 use Magento\Catalog\Model\Product;
 use Magento\Eav\Model\Entity\Attribute\ScopedAttributeInterface;
 use Magento\Eav\Model\Entity\Attribute\Source\Boolean;
 use Magento\Eav\Setup\EavSetup;
 use Magento\Eav\Setup\EavSetupFactory;
 use Magento\Framework\Exception\LocalizedException;
+use Magento\Framework\Setup\InstallDataInterface;
+use Magento\Framework\Setup\ModuleContextInterface;
 use Magento\Framework\Setup\ModuleDataSetupInterface;
-use Magento\Framework\Setup\Patch\DataPatchInterface;
-use Magento\Framework\Setup\Patch\PatchRevertableInterface;
-use Zend_Validate_Exception;
 
 /**
- * Class ProductAttributes
+ * Install data script
  */
-class ProductAttributes implements DataPatchInterface, PatchRevertableInterface
+class InstallData implements InstallDataInterface
 {
+
     const ATTRIBUTE_GROUP = 'TradeTracker';
+
+    /** Category Attributes **/
+    const CATEGORY_DISABLE_ATT = 'tradetracker_disable_export';
+    const CATEGORY_PRODUCT_ID = 'tradetracker_product_id';
+    const CATEGORY_CATERGORY = 'tradetracker_category';
+
+    /** Product Attributes **/
     const PRODUCT_EXCLUDE = 'tradetracker_exclude';
     const PRODUCT_PRODUCT_ID = 'tradetracker_product_id';
 
-    /**
-     * @var ModuleDataSetupInterface
-     */
-    private $moduleDataSetup;
     /**
      * @var EavSetupFactory
      */
     private $eavSetupFactory;
 
     /**
-     * ProductAttributes constructor.
+     * InstallData constructor.
+     *
      * @param EavSetupFactory $eavSetupFactory
-     * @param ModuleDataSetupInterface $moduleDataSetup
      */
     public function __construct(
-        EavSetupFactory $eavSetupFactory,
-        ModuleDataSetupInterface $moduleDataSetup
+        EavSetupFactory $eavSetupFactory
     ) {
         $this->eavSetupFactory = $eavSetupFactory;
-        $this->moduleDataSetup = $moduleDataSetup;
     }
 
     /**
-     * @return DataPatchInterface|void
-     * @throws LocalizedException
-     * @throws Zend_Validate_Exception
+     * {@inheritdoc}
      */
-    public function apply()
-    {
-        $this->moduleDataSetup->getConnection()->startSetup();
-        $this->addProductAttribute();
-        $this->moduleDataSetup->getConnection()->endSetup();
-    }
+    public function install(
+        ModuleDataSetupInterface $setup,
+        ModuleContextInterface $context
+    ) {
+        $setup->startSetup();
 
-    /**
-     * @throws LocalizedException
-     * @throws Zend_Validate_Exception
-     */
-    public function addProductAttribute()
-    {
         /** @var EavSetup $eavSetup */
-        $eavSetup = $this->eavSetupFactory->create(['setup' => $this->moduleDataSetup]);
+        $eavSetup = $this->eavSetupFactory->create(['setup' => $setup]);
 
+        $this->createCategoryAttributes($eavSetup);
+        $this->createProductAttributes($eavSetup);
+
+        $setup->endSetup();
+    }
+
+    /**
+     * @param EavSetup $eavSetup
+     * @throws LocalizedException
+     * @throws \Zend_Validate_Exception
+     */
+    private function createCategoryAttributes(EavSetup $eavSetup)
+    {
+        $eavSetup->addAttribute(
+            Category::ENTITY,
+            self::CATEGORY_DISABLE_ATT,
+            [
+                'type' => 'int',
+                'label' => 'Disable Export',
+                'input' => 'select',
+                'source' => Boolean::class,
+                'global' => ScopedAttributeInterface::SCOPE_GLOBAL,
+                'visible' => true,
+                'required' => false,
+                'user_defined' => false,
+                'default' => 0,
+                'group' => self::ATTRIBUTE_GROUP,
+                'sort_order' => 100,
+            ]
+        );
+
+        $eavSetup->addAttribute(
+            Category::ENTITY,
+            self::CATEGORY_PRODUCT_ID,
+            [
+                'type' => 'varchar',
+                'label' => 'Product Category (conversion)',
+                'input' => 'text',
+                'global' => ScopedAttributeInterface::SCOPE_GLOBAL,
+                'visible' => true,
+                'required' => false,
+                'user_defined' => false,
+                'group' => self::ATTRIBUTE_GROUP,
+                'sort_order' => 101,
+            ]
+        );
+
+        $eavSetup->addAttribute(
+            Category::ENTITY,
+            self::CATEGORY_CATERGORY,
+            [
+                'type' => 'varchar',
+                'label' => 'Category (feed)',
+                'input' => 'text',
+                'global' => ScopedAttributeInterface::SCOPE_GLOBAL,
+                'visible' => true,
+                'required' => false,
+                'user_defined' => false,
+                'group' => self::ATTRIBUTE_GROUP,
+                'sort_order' => 102,
+            ]
+        );
+    }
+
+    /**
+     * @param EavSetup $eavSetup
+     * @throws LocalizedException
+     * @throws \Zend_Validate_Exception
+     */
+    private function createProductAttributes(EavSetup $eavSetup)
+    {
         $attributeSetIds = $eavSetup->getAllAttributeSetIds(Product::ENTITY);
         foreach ($attributeSetIds as $attributeSetId) {
             $eavSetup->addAttributeGroup(Product::ENTITY, $attributeSetId, self::ATTRIBUTE_GROUP, 1001);
@@ -132,47 +196,5 @@ class ProductAttributes implements DataPatchInterface, PatchRevertableInterface
                 );
             }
         }
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public static function getDependencies()
-    {
-        return [];
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function getAliases()
-    {
-        return [];
-    }
-
-    /**
-     * @inheritDoc
-     */
-    public function revert()
-    {
-        /** @var EavSetup $eavSetup */
-        $eavSetup = $this->eavSetupFactory->create(['setup' => $this->moduleDataSetup]);
-
-        $eavSetup->removeAttribute(Product::ENTITY, self::PRODUCT_PRODUCT_ID);
-        $eavSetup->removeAttribute(Product::ENTITY, self::PRODUCT_EXCLUDE);
-
-        $entityTypeId = $eavSetup->getEntityTypeId('catalog_product');
-        $attributeSetIds = $eavSetup->getAllAttributeSetIds($entityTypeId);
-
-        foreach ($attributeSetIds as $attributeSetId) {
-            $eavSetup->removeAttributeGroup($entityTypeId, $attributeSetId, 'TradeTracker');
-        }
-
-        $this->moduleDataSetup->getConnection()->delete(
-            $this->moduleDataSetup->getTable('core_config_data'),
-            ['path LIKE ?' => 'tradetracker/%']
-        );
-
-        $this->moduleDataSetup->endSetup();
     }
 }
